@@ -7,33 +7,119 @@
 //
 
 #import <XCTest/XCTest.h>
+#import "Model.h"
+#import "PhotoDownloadController.h"
 
-@interface FlickrPhotosTests : XCTestCase
+@interface FlickrPhotosTests : XCTestCase<ModelDelegate>
+
+@property (nonatomic, strong) Model *model;
+@property (nonatomic, strong) XCTestExpectation *downloadPhotosExpectation;
 
 @end
 
 @implementation FlickrPhotosTests
 
-- (void)setUp {
+- (void)setUp
+{
     [super setUp];
-    // Put setup code here. This method is called before the invocation of each test method in the class.
+    self.model = [Model modelWithDelegate:self];
 }
 
-- (void)tearDown {
+- (void)tearDown
+{
     // Put teardown code here. This method is called after the invocation of each test method in the class.
     [super tearDown];
 }
 
-- (void)testExample {
-    // This is an example of a functional test case.
-    // Use XCTAssert and related functions to verify your tests produce the correct results.
+- (void)testThatJsonDataProcesses
+{
+    NSData *data = [self.model sampleFlicrData];
+    XCTAssertTrue([self.model processData:data]);
 }
 
-- (void)testPerformanceExample {
-    // This is an example of a performance test case.
-    [self measureBlock:^{
-        // Put the code you want to measure the time of here.
-    }];
+- (void)testThatDownloadComplete
+{
+    self.downloadPhotosExpectation = [self expectationWithDescription:@"Photos are downloaded"];
+    NSData *data = [self.model sampleFlicrData];
+    
+    [self.model processData:data];
+    [self.model downloadPhotos];
+    
+    [self waitForExpectationsWithTimeout:1000.0 handler:^(NSError *error)
+     {
+         NSLog(@"%@", [self.model photos]);
+
+         if (error)
+         {
+             NSLog(@"Timeout Error: %@", error);
+         }
+     }];
+}
+
+- (BOOL)isAllPhotosDownloaded
+{
+    for (PhotoItem *photoItem in self.model.photos)
+    {
+        if (photoItem.photoState == PhotoNotDownloaded)
+            return NO;
+    }
+    
+    return YES;
+}
+
+- (void)modelDidDownloadPhotoItem:(PhotoItem*)photoItem withError:(NSError*)error
+{
+    NSLog(@"modelDidDownloadPhotoItem: %@", photoItem.photo);
+    
+    if ([self isAllPhotosDownloaded])
+    {
+        [self.downloadPhotosExpectation fulfill];
+    }
+}
+
+
+- (void)testThatPhotoDownloadControllerReturnsImage
+{
+    XCTestExpectation *expectation = [self expectationWithDescription:@"Image is downloaded"];
+    
+    PhotoDownloadController *controller = [[PhotoDownloadController alloc] init];
+
+    [controller downloadImageWithURL:[NSURL URLWithString:@"https://farm9.staticflickr.com/8608/16145515232_dacd9535d0_n.jpg"]
+                   completionHandler:^(UIImage *image, NSError *error)
+     {
+         XCTAssertNotNil(image, @"Should return image");
+         [expectation fulfill];
+     }];
+    
+    [self waitForExpectationsWithTimeout:10.0 handler:^(NSError *error)
+     {
+         if (error)
+         {
+             NSLog(@"Timeout Error: %@", error);
+         }
+     }];
+}
+
+- (void)testThatPhotoDownloadControllerReturnsNoImage
+{
+    XCTestExpectation *expectation = [self expectationWithDescription:@"Image is downloaded"];
+    
+    PhotoDownloadController *controller = [[PhotoDownloadController alloc] init];
+    
+    [controller downloadImageWithURL:[NSURL URLWithString:@"xyz"]
+                   completionHandler:^(UIImage *image, NSError *error)
+     {
+         XCTAssertNil(image, @"Should return error");
+         [expectation fulfill];
+     }];
+    
+    [self waitForExpectationsWithTimeout:10.0 handler:^(NSError *error)
+     {
+         if (error)
+         {
+             NSLog(@"Timeout Error: %@", error);
+         }
+     }];
 }
 
 @end
